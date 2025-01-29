@@ -22,6 +22,7 @@ export class TasksService {
   async findAll(
     filters: FindTaskParams,
     pagination: PaginationParams,
+    userId: string,
   ): Promise<[Task[], number]> {
     // const where: FindOptionsWhere<Task>[] = [];
     // if (filters.status) {
@@ -38,7 +39,9 @@ export class TasksService {
 
     const query = this.tasksRepository.createQueryBuilder('task');
 
-    query.leftJoinAndSelect('task.labels', 'labels');
+    query
+      .leftJoinAndSelect('task.labels', 'labels')
+      .where('task.userId = :userId', { userId: userId });
 
     if (filters.status) {
       query.andWhere('task.status = :status', { status: filters.status });
@@ -68,9 +71,11 @@ export class TasksService {
       // });
     }
 
+    query.orderBy(`task.${filters.sortBy}`, filters.sortOrder);
+
     query.skip(pagination.offset).take(pagination.limit);
 
-    console.log(query.getSql());
+    // console.log(query.getSql());
 
     return await query.getManyAndCount();
 

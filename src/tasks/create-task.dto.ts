@@ -3,7 +3,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUUID,
   ValidateNested,
 } from 'class-validator';
 import { TaskStatus } from './task.model';
@@ -23,8 +22,6 @@ export class CreateTaskDto {
   @IsEnum(TaskStatus)
   status: TaskStatus;
 
-  @IsNotEmpty()
-  @IsUUID()
   userId: string;
 
   @IsOptional()

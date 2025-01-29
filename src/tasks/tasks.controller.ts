@@ -6,6 +6,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -22,6 +23,7 @@ import { CreateTaskLabelDto } from './create-task-label.dto';
 import { FindTaskParams } from './find-task.params';
 import { PaginationParams } from '../common/pagination.params';
 import { PaginationResponse } from '../common/pagination.response';
+import { CurrentUserId } from '../users/decorators/current-userId.decorator';
 
 @Controller('tasks')
 export class TasksController {
@@ -31,8 +33,13 @@ export class TasksController {
   public async getAllTasks(
     @Query() filters: FindTaskParams,
     @Query() pagination: PaginationParams,
+    @CurrentUserId() userId: string,
   ): Promise<PaginationResponse<Task>> {
-    const [items, total] = await this.tasksService.findAll(filters, pagination);
+    const [items, total] = await this.tasksService.findAll(
+      filters,
+      pagination,
+      userId,
+    );
 
     return {
       data: items,
@@ -44,21 +51,31 @@ export class TasksController {
   }
 
   @Get('/:id')
-  public async getTaskById(@Param() params: FindOneParams): Promise<Task> {
-    return await this.findOneOrFail(params.id);
+  public async getTaskById(
+    @Param() params: FindOneParams,
+    @CurrentUserId() userId: string,
+  ): Promise<Task> {
+    const task = await this.findOneOrFail(params.id);
+    this.checkTaskOwnerShip(task, userId);
+    return task;
   }
 
   @Post()
-  public async createTask(@Body() createTaskDto: CreateTaskDto): Promise<Task> {
-    return await this.tasksService.create(createTaskDto);
+  public async createTask(
+    @Body() createTaskDto: CreateTaskDto,
+    @CurrentUserId() userId: string,
+  ): Promise<Task> {
+    return await this.tasksService.create({ ...createTaskDto, userId: userId });
   }
 
   @Put('/:id')
   public async updateTask(
     @Param() params: FindOneParams,
     @Body() updateTaskDto: UpdateTaskDto,
+    @CurrentUserId() userId: string,
   ): Promise<Task> {
     const task = await this.findOneOrFail(params.id);
+    this.checkTaskOwnerShip(task, userId);
     try {
       return await this.tasksService.updateTask(task, updateTaskDto);
     } catch (error) {
@@ -72,8 +89,12 @@ export class TasksController {
 
   @Delete('/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  public async deleteTask(@Param() params: FindOneParams): Promise<void> {
+  public async deleteTask(
+    @Param() params: FindOneParams,
+    @CurrentUserId() userId: string,
+  ): Promise<void> {
     const task = await this.findOneOrFail(params.id);
+    this.checkTaskOwnerShip(task, userId);
     await this.tasksService.delete(task);
   }
 
@@ -81,8 +102,10 @@ export class TasksController {
   public async addLabels(
     @Param() params: FindOneParams,
     @Body() labels: CreateTaskLabelDto[],
+    @CurrentUserId() userId: string,
   ): Promise<Task> {
     const task = await this.findOneOrFail(params.id);
+    this.checkTaskOwnerShip(task, userId);
     return this.tasksService.addLabels(task, labels);
   }
 
@@ -91,9 +114,17 @@ export class TasksController {
   public async removeLabels(
     @Param() params: FindOneParams,
     @Body() labels: string[],
+    @CurrentUserId() userId: string,
   ): Promise<void> {
     const task = await this.findOneOrFail(params.id);
+    this.checkTaskOwnerShip(task, userId);
     return this.tasksService.removeLabels(task, labels);
+  }
+
+  private checkTaskOwnerShip(task: Task, userId: string): void {
+    if (task.userId !== userId) {
+      throw new ForbiddenException('You can only access your own tasks');
+    }
   }
 
   private async findOneOrFail(id: string): Promise<Task> {
